@@ -5,7 +5,9 @@ import os
 from datetime import datetime
 import math
 
-st.set_page_config(page_title="Fishing AI Poseidon", page_icon="🎣")
+st.set_page_config(page_title="Poseidon Forecast", page_icon="🌊")
+
+DATA_FILE = "history.csv"
 
 AREAS = {
     "九十九里": (35.53, 140.45),
@@ -14,25 +16,38 @@ AREAS = {
 }
 
 # =========================
+# 履歴
+# =========================
+def load_history():
+    if os.path.exists(DATA_FILE):
+        return pd.read_csv(DATA_FILE)
+    return pd.DataFrame(columns=["日付","エリア","魚種","匹数"])
+
+def save_history(df):
+    df.to_csv(DATA_FILE,index=False)
+
+history = load_history()
+
+# =========================
 # 月齢
 # =========================
 def moon_phase():
     diff = datetime.utcnow() - datetime(2001,1,1)
-    days = diff.days + (diff.seconds/86400)
-    lunations = 0.20439731 + (days * 0.03386319269)
-    return (lunations % 1) * 29.53
+    days = diff.days + diff.seconds/86400
+    lun = 0.20439731 + days*0.03386319269
+    return (lun%1)*29.53
 
 def moon_score():
     phase = moon_phase()
-    if phase < 2 or phase > 27: return 20
-    if 13 < phase < 16: return 20
-    return 10
+    if phase<2 or phase>27: return 15
+    if 13<phase<16: return 15
+    return 5
 
 # =========================
-# 海況取得（日本時間）
+# 海況取得
 # =========================
 @st.cache_data(ttl=600)
-def get_data(lat, lon):
+def get_data(lat,lon):
     marine = requests.get(
         f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=wave_height,sea_surface_temperature&forecast_days=1&timezone=Asia%2FTokyo"
     ).json()
@@ -41,72 +56,98 @@ def get_data(lat, lon):
         f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=windspeed_10m,windgusts_10m,surface_pressure&forecast_days=1&timezone=Asia%2FTokyo"
     ).json()
 
-    hour = datetime.now().hour
+    h = datetime.now().hour
 
     return {
-        "wave": marine["hourly"]["wave_height"][hour],
-        "temp": marine["hourly"]["sea_surface_temperature"][hour],
-        "wind": weather["hourly"]["windspeed_10m"][hour],
-        "gust": weather["hourly"]["windgusts_10m"][hour],
-        "pressure": weather["hourly"]["surface_pressure"][hour]
+        "wave": marine["hourly"]["wave_height"][h],
+        "temp": marine["hourly"]["sea_surface_temperature"][h],
+        "wind": weather["hourly"]["windspeed_10m"][h],
+        "gust": weather["hourly"]["windgusts_10m"][h],
+        "pressure": weather["hourly"]["surface_pressure"][h]
     }
 
 # =========================
-# BI近似ロジック
+# BI内部計算（％化）
 # =========================
-def calculate_bi(sea, tide):
-    score = 0
+def base_score(sea,tide):
+    score=0
 
-    # 波
-    if 0.8 <= sea["wave"] <= 2.0:
-        score += 20
-    elif sea["wave"] > 2.5:
-        score -= 10
+    if 0.8<=sea["wave"]<=2.0: score+=20
+    if 3<=sea["wind"]<=8: score+=15
+    if sea["gust"]>15: score-=10
+    if 1008<=sea["pressure"]<=1018: score+=15
+    if 12<=sea["temp"]<=22: score+=15
+    if tide=="上げ": score+=10
 
-    # 風（強すぎは減点）
-    if 3 <= sea["wind"] <= 7:
-        score += 15
-    if sea["gust"] > 12:
-        score -= 10
+    score+=moon_score()
 
-    # 気圧（1008〜1018が理想）
-    if 1008 <= sea["pressure"] <= 1018:
-        score += 20
-    else:
-        score += 5
+    return max(5,min(score,95))
 
-    # 水温（12〜22が安定）
-    if 12 <= sea["temp"] <= 22:
-        score += 15
-
-    # 潮位
-    if tide == "上げ":
-        score += 10
-
-    # 月齢
-    score += moon_score()
-
-    return max(0, min(score, 100))
+# 魚種補正
+def species_adjust(base,fish):
+    if fish=="ヒラメ":
+        return min(base+5,100)
+    if fish=="青物":
+        return min(base+3,100)
+    if fish=="シーバス":
+        return min(base+7,100)
+    return base
 
 # =========================
 # UI
 # =========================
-st.title("🎣 Fishing AI Poseidon – BI近似版")
+st.title("🌊 Poseidon Marine Forecast")
 
-tide = st.selectbox("潮位", ["上げ","下げ"])
+tide = st.selectbox("潮位",["上げ","下げ"])
+
+st.header("📊 本日の期待値")
 
 for area,coords in AREAS.items():
     sea = get_data(*coords)
-    bi = calculate_bi(sea, tide)
+    base = base_score(sea,tide)
+
+    hirame = species_adjust(base,"ヒラメ")
+    aomono = species_adjust(base,"青物")
+    seabass = species_adjust(base,"シーバス")
+
+    total = round((hirame+aomono+seabass)/3)
 
     st.subheader(area)
-    st.metric("BI近似指数", f"{bi}")
+    c1,c2,c3,c4 = st.columns(4)
+
+    c1.metric("総合",f"{total}%")
+    c2.metric("ヒラメ",f"{hirame}%")
+    c3.metric("青物",f"{aomono}%")
+    c4.metric("シーバス",f"{seabass}%")
 
     st.caption(
         f"波:{round(sea['wave'],1)}m "
         f"風:{round(sea['wind'],1)}m/s "
         f"最大:{round(sea['gust'],1)}m/s "
         f"気圧:{round(sea['pressure'],1)}hPa "
-        f"水温:{round(sea['temp'],1)}℃ "
-        f"月齢:{round(moon_phase(),1)}"
+        f"水温:{round(sea['temp'],1)}℃"
     )
+
+# =========================
+# 釣果記録フォーム復活
+# =========================
+st.header("📝 釣果記録")
+
+with st.form("record"):
+    d = st.date_input("日付")
+    a = st.selectbox("エリア",list(AREAS.keys()))
+    f = st.selectbox("魚種",["ヒラメ","青物","シーバス"])
+    c = st.number_input("匹数",0)
+    btn = st.form_submit_button("保存")
+
+if btn:
+    new = {"日付":str(d),"エリア":a,"魚種":f,"匹数":c}
+    history = pd.concat([history,pd.DataFrame([new])],ignore_index=True)
+    save_history(history)
+    st.success("保存完了")
+
+if not history.empty:
+    st.header("📈 勝率推移")
+    history["成功"] = history["匹数"]>0
+    chart = history.groupby("日付")["成功"].mean()*100
+    st.line_chart(chart)
