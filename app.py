@@ -3,18 +3,46 @@ import requests
 import pandas as pd
 import os
 from datetime import datetime
-import math
 
 st.set_page_config(page_title="POSEIDON", page_icon=None)
 
 # =========================
-# タイトル（1行＋サブ小さめ）
+# ラスボスCSS
 # =========================
 st.markdown("""
-<h1 style='margin-bottom:0;'>
-POSEIDON<span style='font-size:60%; font-weight:400;'>-海の支配者-</span>
-</h1>
+<style>
+body {
+    background-color: #0b0f19;
+}
+.main {
+    background-color: #0b0f19;
+    color: white;
+}
+.gold-title {
+    font-size: 52px;
+    font-weight: 900;
+    text-align: center;
+    background: linear-gradient(180deg,#fff6b7,#f0c75e,#b88900);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 10px rgba(255,215,0,0.6);
+    letter-spacing: 4px;
+}
+.sub-title {
+    font-size: 22px;
+    text-align: center;
+    color: #d4af37;
+    letter-spacing: 6px;
+    margin-bottom: 40px;
+}
+</style>
 """, unsafe_allow_html=True)
+
+# =========================
+# タイトル
+# =========================
+st.markdown("<div class='gold-title'>POSEIDON</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>－海の支配者－</div>", unsafe_allow_html=True)
 
 # =========================
 # 設定
@@ -88,24 +116,18 @@ def base_score(sea,tide):
 
     if 0.8 <= sea["wave"] <= 2.0:
         score += 20
-
     if 3 <= sea["wind"] <= 8:
         score += 15
-
     if sea["gust"] > 15:
         score -= 10
-
     if 1008 <= sea["pressure"] <= 1018:
         score += 15
-
     if 12 <= sea["temp"] <= 22:
         score += 15
-
     if tide == "上げ":
         score += 10
 
     score += moon_score()
-
     return max(5, min(score, 95))
 
 def species_adjust(base, fish):
@@ -125,7 +147,6 @@ tide = st.selectbox("潮位", ["上げ", "下げ"])
 st.header("本日の期待値")
 
 for area,coords in AREAS.items():
-
     sea = get_data(*coords)
     base = base_score(sea,tide)
 
@@ -144,11 +165,11 @@ for area,coords in AREAS.items():
     c4.metric("シーバス", f"{seabass}%")
 
     st.caption(
-        f"波:{round(sea['wave'],1)}m  "
-        f"風:{round(sea['wind'],1)}m/s  "
-        f"最大:{round(sea['gust'],1)}m/s  "
-        f"気圧:{round(sea['pressure'],1)}hPa  "
-        f"水温:{round(sea['temp'],1)}℃  "
+        f"波:{round(sea['wave'],1)}m | "
+        f"風:{round(sea['wind'],1)}m/s | "
+        f"最大:{round(sea['gust'],1)}m/s | "
+        f"気圧:{round(sea['pressure'],1)}hPa | "
+        f"水温:{round(sea['temp'],1)}℃ | "
         f"月齢:{round(moon_phase(),1)}"
     )
 
@@ -168,7 +189,7 @@ if btn:
     new = {"日付":str(d),"エリア":a,"魚種":f,"匹数":c}
     history = pd.concat([history,pd.DataFrame([new])],ignore_index=True)
     save_history(history)
-    st.success("保存完了")
+    st.success("記録された…")
 
 if not history.empty:
     st.header("勝率推移")
