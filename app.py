@@ -8,6 +8,15 @@ import math
 st.set_page_config(page_title="POSEIDON", page_icon=None)
 
 # =========================
+# タイトル（1行＋サブ小さめ）
+# =========================
+st.markdown("""
+<h1 style='margin-bottom:0;'>
+POSEIDON<span style='font-size:60%; font-weight:400;'>-海の支配者-</span>
+</h1>
+""", unsafe_allow_html=True)
+
+# =========================
 # 設定
 # =========================
 DATA_FILE = "history.csv"
@@ -19,7 +28,7 @@ AREAS = {
 }
 
 # =========================
-# 履歴管理
+# 履歴
 # =========================
 def load_history():
     if os.path.exists(DATA_FILE):
@@ -32,7 +41,7 @@ def save_history(df):
 history = load_history()
 
 # =========================
-# 月齢計算
+# 月齢
 # =========================
 def moon_phase():
     diff = datetime.utcnow() - datetime(2001,1,1)
@@ -72,7 +81,7 @@ def get_data(lat,lon):
     }
 
 # =========================
-# 基本BIスコア（％化）
+# BIロジック
 # =========================
 def base_score(sea,tide):
     score = 0
@@ -99,7 +108,6 @@ def base_score(sea,tide):
 
     return max(5, min(score, 95))
 
-# 魚種補正
 def species_adjust(base, fish):
     if fish == "ヒラメ":
         return min(base + 5, 100)
@@ -112,8 +120,6 @@ def species_adjust(base, fish):
 # =========================
 # UI
 # =========================
-st.title("POSEIDON")
-
 tide = st.selectbox("潮位", ["上げ", "下げ"])
 
 st.header("本日の期待値")
