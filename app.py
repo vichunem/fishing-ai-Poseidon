@@ -7,20 +7,33 @@ from datetime import datetime
 st.set_page_config(page_title="POSEIDON")
 
 # =====================
-# タイトル
+# ラスボスCSS
 # =====================
 st.markdown("""
 <style>
+body {background-color:#0b0f19;}
+.main {background-color:#0b0f19; color:white;}
+
 .gold-title {
-    font-size:48px;
+    font-size:56px;
     font-weight:900;
     text-align:center;
+    background: linear-gradient(180deg,#fff6b7,#f0c75e,#b88900);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    text-shadow:0 0 15px rgba(255,215,0,0.8);
+    letter-spacing:6px;
 }
+
 .sub-title {
-    font-size:20px;
+    font-size:22px;
     text-align:center;
-    margin-bottom:30px;
+    color:#d4af37;
+    letter-spacing:8px;
+    margin-bottom:40px;
 }
+
+.block-container {padding-top:2rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,7 +105,7 @@ def get_data(lat, lon):
     }
 
 # =====================
-# スコア
+# スコア計算
 # =====================
 def base_score(sea, tide):
     score = 0
@@ -154,15 +167,15 @@ for area, coords in AREAS.items():
 
     st.caption(
         f"波:{round(sea['wave'],1)}m | "
-        f"風:{round(sea['wind'],1)}m/s | "
-        f"最大:{round(sea['gust'],1)}m/s | "
+        f"風速:{round(sea['wind'],1)}m/s | "
+        f"最大風速:{round(sea['gust'],1)}m/s | "
         f"風向:{round(sea['wind_dir'],0)}° | "
         f"水温:{round(sea['temp'],1)}℃ | "
         f"気圧:{round(sea['pressure'],1)}hPa"
     )
 
 # =====================
-# 釣果記録
+# 釣果記録（元形式維持）
 # =====================
 st.header("釣果記録")
 
