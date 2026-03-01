@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(page_title="POSEIDON", page_icon=None)
 
 # =========================
-# タイトル
+# ラスボスUI
 # =========================
 st.markdown("""
 <style>
@@ -53,9 +53,6 @@ def save_history(df):
 
 history = load_history()
 
-# =========================
-# エリア
-# =========================
 AREAS = {
     "九十九里": (35.53, 140.45),
     "南房総": (35.00, 139.90),
@@ -83,11 +80,11 @@ def moon_score():
 @st.cache_data(ttl=600)
 def get_data(lat,lon):
     marine = requests.get(
-        f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=wave_height,sea_surface_temperature&forecast_days=2&timezone=Asia%2FTokyo"
+        f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=wave_height,sea_surface_temperature&forecast_days=1&timezone=Asia%2FTokyo"
     ).json()
 
     weather = requests.get(
-        f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=windspeed_10m,windgusts_10m,winddirection_10m,surface_pressure&forecast_days=2&timezone=Asia%2FTokyo"
+        f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=windspeed_10m,windgusts_10m,winddirection_10m,surface_pressure&forecast_days=1&timezone=Asia%2FTokyo"
     ).json()
 
     h = datetime.now().hour
@@ -102,24 +99,29 @@ def get_data(lat,lon):
     }
 
 # =========================
-# スコア計算
+# 基本スコア
 # =========================
-def calculate_score(sea,tide):
+def base_score(sea,tide):
     score = 0
-
     if 0.8 <= sea["wave"] <= 2.0: score += 20
     if 3 <= sea["wind"] <= 8: score += 15
     if sea["gust"] > 15: score -= 10
     if 250 <= sea["wind_dir"] <= 320 and 2 <= sea["wind"] <= 6:
         score += 10
-    if 1008 <= sea["pressure"] <= 1018:
-        score += 15
-    if tide == "上げ":
-        score += 10
-
+    if 1008 <= sea["pressure"] <= 1018: score += 15
+    if tide == "上げ": score += 10
     score += moon_score()
-
     return max(5, min(score, 95))
+
+# 魚種別補正
+def species_score(base, fish):
+    if fish == "ヒラメ":
+        return min(base + 5, 100)
+    if fish == "青物":
+        return min(base + 3, 100)
+    if fish == "シーバス":
+        return min(base + 7, 100)
+    return base
 
 # =========================
 # UI
@@ -130,21 +132,22 @@ st.header("本日の期待値")
 
 for area,coords in AREAS.items():
     sea = get_data(*coords)
-    score = calculate_score(sea,tide)
+    base = base_score(sea,tide)
+
+    hirame = species_score(base,"ヒラメ")
+    aomono = species_score(base,"青物")
+    seabass = species_score(base,"シーバス")
+    total = round((hirame + aomono + seabass) / 3)
 
     st.subheader(area)
-    st.metric("総合", f"{score}%")
-
-    st.caption(
-        f"波:{round(sea['wave'],1)}m | "
-        f"風:{round(sea['wind'],1)}m/s | "
-        f"風向:{round(sea['wind_dir'],0)}° | "
-        f"水温:{round(sea['temp'],1)}℃ | "
-        f"気圧:{round(sea['pressure'],1)}hPa"
-    )
+    c1,c2,c3,c4 = st.columns(4)
+    c1.metric("総合", f"{total}%")
+    c2.metric("ヒラメ", f"{hirame}%")
+    c3.metric("青物", f"{aomono}%")
+    c4.metric("シーバス", f"{seabass}%")
 
 # =========================
-# 釣果記録（ルアー追加）
+# 釣果記録
 # =========================
 st.header("釣果記録")
 
@@ -153,14 +156,11 @@ with st.form("record"):
     a = st.selectbox("エリア", list(AREAS.keys()))
     f = st.selectbox("魚種", ["ヒラメ","青物","シーバス"])
     c = st.number_input("匹数", 0)
-
     lure_type = st.selectbox(
         "ルアー種類",
         ["シンペン","トップ","バイブ","メタルジグ","ミノー","ワーム"]
     )
-
-    color = st.text_input("カラー（手入力）")
-
+    color = st.text_input("カラー")
     btn = st.form_submit_button("保存")
 
 if btn:
@@ -175,8 +175,3 @@ if btn:
     history = pd.concat([history,pd.DataFrame([new])],ignore_index=True)
     save_history(history)
     st.success("記録された…")
-
-if not history.empty:
-    st.header("ルアー別実績")
-    lure_stats = history.groupby("ルアー種類")["匹数"].sum()
-    st.bar_chart(lure_stats)
