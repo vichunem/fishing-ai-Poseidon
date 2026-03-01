@@ -48,9 +48,7 @@ DATA_FILE = "history.csv"
 def load_history():
     if os.path.exists(DATA_FILE):
         return pd.read_csv(DATA_FILE)
-    return pd.DataFrame(columns=[
-        "日付","エリア","魚種","匹数","ルアー種類","カラー"
-    ])
+    return pd.DataFrame(columns=["日付","エリア","魚種","匹数","ルアー種類","カラー"])
 
 def save_history(df):
     df.to_csv(DATA_FILE, index=False)
@@ -105,29 +103,59 @@ def get_data(lat, lon):
     }
 
 # =====================
-# スコア計算
+# 本気スコア計算
 # =====================
 def base_score(sea, tide):
+
     score = 0
 
+    # 波
     if 0.8 <= sea["wave"] <= 2.0:
         score += 20
+    elif sea["wave"] < 0.5:
+        score += 5
+    elif sea["wave"] > 2.5:
+        score -= 20
 
-    if 3 <= sea["wind"] <= 8:
+    # ---- 本気風ロジック ----
+    wind = sea["wind"]
+    gust = sea["gust"]
+    direction = sea["wind_dir"]
+
+    if 0 <= wind <= 2:
+        score += 10
+    elif 3 <= wind <= 6:
         score += 15
+    elif 7 <= wind <= 9:
+        score += 5
+    elif 10 <= wind <= 12:
+        score -= 10
+    elif 13 <= wind <= 15:
+        score -= 20
+    elif wind >= 16:
+        score -= 35
 
-    if sea["gust"] > 15:
+    if gust > 20:
         score -= 10
 
-    if 250 <= sea["wind_dir"] <= 320:
-        score += 10
+    # 西〜北西は追い風寄り
+    if 240 <= direction <= 320:
+        score += 5
+    # 東〜南東は向かい風寄り
+    elif 30 <= direction <= 140:
+        score -= 10
 
+    # 気圧
     if 1008 <= sea["pressure"] <= 1018:
         score += 15
+    elif sea["pressure"] < 1000:
+        score -= 15
 
+    # 潮位
     if tide == "上げ":
         score += 10
 
+    # 月齢
     score += moon_score()
 
     return max(5, min(score, 95))
@@ -175,7 +203,7 @@ for area, coords in AREAS.items():
     )
 
 # =====================
-# 釣果記録（元形式維持）
+# 釣果記録
 # =====================
 st.header("釣果記録")
 
