@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(page_title="POSEIDON", page_icon=None)
 
 # =========================
-# ラスボスUI
+# ラスボスUI（固定）
 # =========================
 st.markdown("""
 <style>
@@ -37,7 +37,7 @@ st.markdown("<div class='gold-title'>POSEIDON</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>－海の支配者－</div>", unsafe_allow_html=True)
 
 # =========================
-# データ保存
+# データ保存（固定）
 # =========================
 DATA_FILE = "history.csv"
 
@@ -60,7 +60,7 @@ AREAS = {
 }
 
 # =========================
-# 月齢
+# 月齢（固定）
 # =========================
 def moon_phase():
     diff = datetime.utcnow() - datetime(2001,1,1)
@@ -75,7 +75,7 @@ def moon_score():
     return 5
 
 # =========================
-# 海況取得
+# 海況取得（固定）
 # =========================
 @st.cache_data(ttl=600)
 def get_data(lat,lon):
@@ -99,7 +99,7 @@ def get_data(lat,lon):
     }
 
 # =========================
-# 基本スコア
+# 基本スコア（固定）
 # =========================
 def base_score(sea,tide):
     score = 0
@@ -113,7 +113,6 @@ def base_score(sea,tide):
     score += moon_score()
     return max(5, min(score, 95))
 
-# 魚種別補正
 def species_score(base, fish):
     if fish == "ヒラメ":
         return min(base + 5, 100)
@@ -124,7 +123,7 @@ def species_score(base, fish):
     return base
 
 # =========================
-# UI
+# UI（固定構造）
 # =========================
 tide = st.selectbox("潮位", ["上げ","下げ"])
 
@@ -140,14 +139,24 @@ for area,coords in AREAS.items():
     total = round((hirame + aomono + seabass) / 3)
 
     st.subheader(area)
+
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("総合", f"{total}%")
     c2.metric("ヒラメ", f"{hirame}%")
     c3.metric("青物", f"{aomono}%")
     c4.metric("シーバス", f"{seabass}%")
 
+    st.caption(
+        f"波:{round(sea['wave'],1)}m | "
+        f"風:{round(sea['wind'],1)}m/s | "
+        f"最大:{round(sea['gust'],1)}m/s | "
+        f"風向:{round(sea['wind_dir'],0)}° | "
+        f"水温:{round(sea['temp'],1)}℃ | "
+        f"気圧:{round(sea['pressure'],1)}hPa"
+    )
+
 # =========================
-# 釣果記録
+# 釣果記録（固定）
 # =========================
 st.header("釣果記録")
 
