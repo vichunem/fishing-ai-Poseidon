@@ -118,3 +118,79 @@ def base_score(sea, tide):
     score += moon_score()
 
     return max(5, min(score, 95))
+
+def species_score(base, fish):
+    if fish == "ヒラメ":
+        return min(base + 5, 100)
+    if fish == "青物":
+        return min(base + 3, 100)
+    if fish == "シーバス":
+        return min(base + 7, 100)
+    return base
+
+# =====================
+# UI
+# =====================
+tide = st.selectbox("潮位", ["上げ", "下げ"])
+
+st.header("本日の期待値")
+
+for area, coords in AREAS.items():
+    sea = get_data(*coords)
+    base = base_score(sea, tide)
+
+    hirame = species_score(base, "ヒラメ")
+    aomono = species_score(base, "青物")
+    seabass = species_score(base, "シーバス")
+    total = round((hirame + aomono + seabass) / 3)
+
+    st.subheader(area)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("総合", f"{total}%")
+    c2.metric("ヒラメ", f"{hirame}%")
+    c3.metric("青物", f"{aomono}%")
+    c4.metric("シーバス", f"{seabass}%")
+
+    st.caption(
+        f"波:{round(sea['wave'],1)}m | "
+        f"風:{round(sea['wind'],1)}m/s | "
+        f"最大:{round(sea['gust'],1)}m/s | "
+        f"風向:{round(sea['wind_dir'],0)}° | "
+        f"水温:{round(sea['temp'],1)}℃ | "
+        f"気圧:{round(sea['pressure'],1)}hPa"
+    )
+
+# =====================
+# 釣果記録
+# =====================
+st.header("釣果記録")
+
+with st.form("record"):
+    d = st.date_input("日付")
+    a = st.selectbox("エリア", list(AREAS.keys()))
+    f = st.selectbox("魚種", ["ヒラメ", "青物", "シーバス"])
+    c = st.number_input("匹数", 0)
+
+    lure_type = st.selectbox(
+        "ルアー種類",
+        ["シンペン", "トップ", "バイブ", "メタルジグ", "ミノー", "ワーム"]
+    )
+
+    color = st.text_input("カラー")
+
+    btn = st.form_submit_button("保存")
+
+if btn:
+    new = {
+        "日付": str(d),
+        "エリア": a,
+        "魚種": f,
+        "匹数": c,
+        "ルアー種類": lure_type,
+        "カラー": color
+    }
+
+    history = pd.concat([history, pd.DataFrame([new])], ignore_index=True)
+    save_history(history)
+    st.success("記録された")
