@@ -61,15 +61,15 @@ history = load_history()
 AREAS = {
     "九十九里": {
         "sea": (35.53, 140.45),
-        "land": (35.66, 140.50)  # 横芝光付近
+        "land": (35.66, 140.50)  # 横芝光
     },
     "南房総": {
         "sea": (35.00, 139.90),
-        "land": (34.99, 139.87)  # 館山付近
+        "land": (34.99, 139.87)  # 館山
     },
     "新舞子": {
         "sea": (35.30, 139.80),
-        "land": (35.31, 139.82)  # 富津付近
+        "land": (35.31, 139.82)  # 富津
     }
 }
 
@@ -91,9 +91,10 @@ def moon_score():
     return 5
 
 # =====================
-# current_weather取得
+# 安全リアルタイム取得
 # =====================
 def get_current_weather(lat, lon):
+
     url = (
         f"https://api.open-meteo.com/v1/forecast?"
         f"latitude={lat}&longitude={lon}"
@@ -101,34 +102,46 @@ def get_current_weather(lat, lon):
         f"&hourly=wave_height,sea_surface_temperature,surface_pressure"
         f"&timezone=Asia%2FTokyo"
     )
-    r = requests.get(url).json()
+
+    try:
+        r = requests.get(url, timeout=10).json()
+    except:
+        return {"wind":0,"wind_dir":0,"wave":0,"temp":0,"pressure":1013}
 
     current = r.get("current_weather", {})
     hourly = r.get("hourly", {})
-    hour_index = 0
 
-    if "time" in hourly:
-        now_hour = datetime.now().hour
-        hour_index = now_hour if now_hour < len(hourly["time"]) else 0
+    now_hour = datetime.now().hour
+
+    def safe_hourly(key, default=0):
+        try:
+            arr = hourly.get(key, [])
+            if now_hour < len(arr) and arr[now_hour] is not None:
+                return float(arr[now_hour])
+            return default
+        except:
+            return default
 
     return {
-        "wind": current.get("windspeed", 0),
-        "wind_dir": current.get("winddirection", 0),
-        "wave": hourly.get("wave_height", [0])[hour_index],
-        "temp": hourly.get("sea_surface_temperature", [0])[hour_index],
-        "pressure": hourly.get("surface_pressure", [1013])[hour_index]
+        "wind": float(current.get("windspeed", 0) or 0),
+        "wind_dir": float(current.get("winddirection", 0) or 0),
+        "wave": safe_hourly("wave_height", 0),
+        "temp": safe_hourly("sea_surface_temperature", 0),
+        "pressure": safe_hourly("surface_pressure", 1013)
     }
 
 # =====================
 # 本気スコア計算
 # =====================
 def base_score(sea, tide):
+
     score = 0
 
     # 波
-    if 0.8 <= sea["wave"] <= 2.0:
+    wave = sea["wave"]
+    if 0.8 <= wave <= 2.0:
         score += 20
-    elif sea["wave"] > 2.5:
+    elif wave > 2.5:
         score -= 20
 
     # 風（本気仕様）
@@ -148,16 +161,18 @@ def base_score(sea, tide):
     elif wind >= 16:
         score -= 35
 
-    # 風向（西〜北西が有利）
+    # 風向補正
     if 240 <= direction <= 320:
         score += 5
     elif 30 <= direction <= 140:
         score -= 10
 
     # 気圧
-    if 1008 <= sea["pressure"] <= 1018:
+    pressure = sea["pressure"]
+    if 1008 <= pressure <= 1018:
         score += 15
 
+    # 潮位
     if tide == "上げ":
         score += 10
 
@@ -175,7 +190,7 @@ def species_score(base, fish):
     return base
 
 # =====================
-# UI（様式固定）
+# UI
 # =====================
 tide = st.selectbox("潮位", ["上げ", "下げ"])
 
@@ -186,7 +201,7 @@ for area, coords in AREAS.items():
     sea_data = get_current_weather(*coords["sea"])
     land_data = get_current_weather(*coords["land"])
 
-    # 重み付け（陸0.7 海0.3）
+    # 合法リアルタイム重み付け
     combined_wind = land_data["wind"] * 0.7 + sea_data["wind"] * 0.3
     combined_dir = land_data["wind_dir"]
 
