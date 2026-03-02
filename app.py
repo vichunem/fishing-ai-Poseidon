@@ -32,8 +32,6 @@ body {background-color:#0b0f19;}
     letter-spacing:8px;
     margin-bottom:40px;
 }
-
-.block-container {padding-top:2rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,7 +39,7 @@ st.markdown("<div class='gold-title'>POSEIDON</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>－海の支配者－</div>", unsafe_allow_html=True)
 
 # =====================
-# データ保存（固定）
+# データ保存
 # =====================
 DATA_FILE = "history.csv"
 
@@ -56,127 +54,82 @@ def save_history(df):
 history = load_history()
 
 # =====================
-# エリア座標
+# エリア座標（海のみ使用）
 # =====================
 AREAS = {
-    "九十九里": {
-        "sea": (35.53, 140.45),
-        "land": (35.66, 140.50)  # 横芝光
-    },
-    "南房総": {
-        "sea": (35.00, 139.90),
-        "land": (34.99, 139.87)  # 館山
-    },
-    "新舞子": {
-        "sea": (35.30, 139.80),
-        "land": (35.31, 139.82)  # 富津
-    }
+    "九十九里": (35.53, 140.45),
+    "南房総": (35.00, 139.90),
+    "新舞子": (35.30, 139.80),
 }
 
 # =====================
-# 月齢
+# 海況取得（風なし）
 # =====================
-def moon_phase():
-    diff = datetime.utcnow() - datetime(2001,1,1)
-    days = diff.days + diff.seconds/86400
-    lun = 0.20439731 + days*0.03386319269
-    return (lun % 1) * 29.53
-
-def moon_score():
-    phase = moon_phase()
-    if phase < 2 or phase > 27:
-        return 15
-    if 13 < phase < 16:
-        return 15
-    return 5
-
-# =====================
-# 安全リアルタイム取得
-# =====================
-def get_current_weather(lat, lon):
+def get_marine(lat, lon):
 
     url = (
-        f"https://api.open-meteo.com/v1/forecast?"
+        f"https://marine-api.open-meteo.com/v1/marine?"
         f"latitude={lat}&longitude={lon}"
-        f"&current_weather=true"
-        f"&hourly=wave_height,sea_surface_temperature,surface_pressure"
+        f"&hourly=wave_height,sea_surface_temperature"
         f"&timezone=Asia%2FTokyo"
     )
 
     try:
         r = requests.get(url, timeout=10).json()
-    except:
-        return {"wind":0,"wind_dir":0,"wave":0,"temp":0,"pressure":1013}
+        hourly = r.get("hourly", {})
+        now_hour = datetime.now().hour
 
-    current = r.get("current_weather", {})
-    hourly = r.get("hourly", {})
-
-    now_hour = datetime.now().hour
-
-    def safe_hourly(key, default=0):
-        try:
+        def safe(key, default=0):
             arr = hourly.get(key, [])
             if now_hour < len(arr) and arr[now_hour] is not None:
                 return float(arr[now_hour])
             return default
-        except:
-            return default
 
-    return {
-        "wind": float(current.get("windspeed", 0) or 0),
-        "wind_dir": float(current.get("winddirection", 0) or 0),
-        "wave": safe_hourly("wave_height", 0),
-        "temp": safe_hourly("sea_surface_temperature", 0),
-        "pressure": safe_hourly("surface_pressure", 1013)
-    }
+        return {
+            "wave": safe("wave_height", 0),
+            "temp": safe("sea_surface_temperature", 0)
+        }
+
+    except:
+        return {"wave":0,"temp":0}
 
 # =====================
-# 本気スコア計算
+# スコア計算（中潮最強）
 # =====================
-def base_score(sea, tide):
+def base_score(sea, tide_type):
 
     score = 0
 
-    # 波
+    # ---- 波（最重要）----
     wave = sea["wave"]
-    if 0.8 <= wave <= 2.0:
-        score += 20
+
+    if 0.6 <= wave <= 1.2:
+        score += 35
+    elif 1.2 < wave <= 1.8:
+        score += 25
+    elif 0.3 <= wave < 0.6:
+        score += 15
     elif wave > 2.5:
-        score -= 20
+        score -= 25
 
-    # 風（本気仕様）
-    wind = sea["wind"]
-    direction = sea["wind_dir"]
-
-    if 0 <= wind <= 2:
+    # ---- 潮（最強：中潮）----
+    if tide_type == "中潮":
+        score += 30
+    elif tide_type == "大潮":
+        score += 20
+    elif tide_type == "小潮":
         score += 10
-    elif 3 <= wind <= 6:
-        score += 15
-    elif 7 <= wind <= 9:
+    else:
         score += 5
-    elif 10 <= wind <= 12:
-        score -= 10
-    elif 13 <= wind <= 15:
-        score -= 20
-    elif wind >= 16:
-        score -= 35
 
-    # 風向補正
-    if 240 <= direction <= 320:
-        score += 5
-    elif 30 <= direction <= 140:
-        score -= 10
-
-    # 気圧
-    pressure = sea["pressure"]
-    if 1008 <= pressure <= 1018:
+    # ---- 水温（簡易補正）----
+    temp = sea["temp"]
+    if 16 <= temp <= 23:
         score += 15
-
-    # 潮位
-    if tide == "上げ":
-        score += 10
-
-    score += moon_score()
+    elif 12 <= temp < 16:
+        score += 8
+    elif temp > 26:
+        score -= 5
 
     return max(5, min(score, 95))
 
@@ -192,24 +145,14 @@ def species_score(base, fish):
 # =====================
 # UI
 # =====================
-tide = st.selectbox("潮位", ["上げ", "下げ"])
+tide_type = st.selectbox("潮", ["中潮","大潮","小潮","長潮","若潮"])
 
 st.header("本日の期待値")
 
 for area, coords in AREAS.items():
 
-    sea_data = get_current_weather(*coords["sea"])
-    land_data = get_current_weather(*coords["land"])
-
-    # 合法リアルタイム重み付け
-    combined_wind = land_data["wind"] * 0.7 + sea_data["wind"] * 0.3
-    combined_dir = land_data["wind_dir"]
-
-    sea = sea_data.copy()
-    sea["wind"] = combined_wind
-    sea["wind_dir"] = combined_dir
-
-    base = base_score(sea, tide)
+    sea = get_marine(*coords)
+    base = base_score(sea, tide_type)
 
     hirame = species_score(base, "ヒラメ")
     aomono = species_score(base, "青物")
@@ -226,14 +169,11 @@ for area, coords in AREAS.items():
 
     st.caption(
         f"波:{round(sea['wave'],1)}m | "
-        f"風速:{round(sea['wind'],1)}m/s | "
-        f"風向:{round(sea['wind_dir'],0)}° | "
-        f"水温:{round(sea['temp'],1)}℃ | "
-        f"気圧:{round(sea['pressure'],1)}hPa"
+        f"水温:{round(sea['temp'],1)}℃"
     )
 
 # =====================
-# 釣果記録（固定）
+# 釣果記録（維持）
 # =====================
 st.header("釣果記録")
 
